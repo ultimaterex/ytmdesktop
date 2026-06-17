@@ -1,29 +1,34 @@
 export class PolymerHook {
-  private reflectDecorate: (...args: unknown[]) => unknown;
-  private hookedObjs: object[] = [];
-  private recordObjects = true;
-
   private _ytmStore;
   public get ytmStore(): unknown {
     return this._ytmStore;
   }
 
   public init() {
-    Object.defineProperty(Reflect, "decorate", {
-      set: value => {
-        this.reflectDecorate = value;
-      },
-      get: () => {
-        return (...args: unknown[]) => {
-          if (this.recordObjects) {
-            const obj = args[1];
-            if (typeof obj === "object") {
-              this.hookedObjs.push(obj);
-            }
+    // It's OK to alias this here as we're hooking YTMs passed `this`
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    const fakeBaseClass = function () {
+      try {
+        if (!self._ytmStore) {
+          if (this.store && !!this.store.getState && !!this.store.dispatch && !!this.store.subscribe) {
+            const ytmdHook = {
+              ytmStore: this.store
+            };
+            Object.freeze(ytmdHook);
+            window.__YTMD_HOOK__ = ytmdHook;
+            self._ytmStore = this.store;
           }
-
-          return this.reflectDecorate(...args);
-        };
+        }
+      } catch {
+        /* empty */
+      }
+    };
+    Object.defineProperty(window, "PolymerFakeBaseClassWithoutHtml", {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      set: _value => {},
+      get: () => {
+        return fakeBaseClass;
       }
     });
   }
@@ -33,27 +38,6 @@ export class PolymerHook {
 
     return new Promise<void>(resolve => {
       const interval = setInterval(() => {
-        for (const hookedObj of this.hookedObjs) {
-          if (hookedObj.is && hookedObj.is === "ytmusic-app") {
-            if (hookedObj.provide) {
-              for (const provider of hookedObj.provide) {
-                if (provider.useValue && provider.useValue.store) {
-                  this._ytmStore = provider.useValue.store;
-                  this.recordObjects = false;
-                  this.hookedObjs = [];
-
-                  // TODO: Remove this global. We're going to keep it internal but an integration script currently needs it for now until that's changed.
-                  const ytmdHook = {
-                    ytmStore: provider.useValue.store
-                  };
-                  Object.freeze(ytmdHook);
-                  window.__YTMD_HOOK__ = ytmdHook;
-                }
-              }
-            }
-          }
-        }
-
         if (this._ytmStore) {
           resolve();
           clearInterval(interval);
