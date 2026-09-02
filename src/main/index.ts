@@ -396,6 +396,15 @@ const store = new Conf<StoreSchema>({
     },
     developer: {
       enableDevTools: false
+    },
+    proxy: {
+      enabled: false,
+      protocol: "socks5",
+      host: "",
+      port: 1080,
+      username: "",
+      passwordEncrypted: null,
+      bypassRules: "<local>"
     }
   },
   beforeEachMigration: (store, context) => {
@@ -421,6 +430,19 @@ const store = new Conf<StoreSchema>({
     ">=2.0.7": store => {
       if (!store.has("appearance.trayIconStyle")) {
         store.set("appearance.trayIconStyle", 0);
+      }
+    },
+    ">=2.0.12": store => {
+      if (!store.has("proxy")) {
+        store.set("proxy", {
+          enabled: false,
+          protocol: "socks5",
+          host: "",
+          port: 1080,
+          username: "",
+          passwordEncrypted: null,
+          bypassRules: "<local>"
+        });
       }
     }
   }

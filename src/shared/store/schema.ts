@@ -4,6 +4,8 @@ export enum TrayIconStyle {
   Black = 2
 }
 
+export type ProxyProtocol = "http" | "https" | "socks4" | "socks5";
+
 export type StoreSchema = {
   metadata: {
     version: 1;
@@ -61,6 +63,15 @@ export type StoreSchema = {
   };
   developer: {
     enableDevTools: boolean;
+  };
+  proxy: {
+    enabled: boolean;
+    protocol: ProxyProtocol;
+    host: string;
+    port: number;
+    username: string;
+    passwordEncrypted: string | null;
+    bypassRules: string;
   };
 };
 
