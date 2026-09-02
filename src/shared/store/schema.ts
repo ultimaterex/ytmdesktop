@@ -77,6 +77,8 @@ export type StoreSchema = {
 
 export type MemoryStoreSchema = {
   discordPresenceConnectionFailed: boolean;
+  proxyMisconfigured: boolean;
+  proxyApplyFailed: boolean;
   shortcutsPlayPauseRegisterFailed: boolean;
   shortcutsNextRegisterFailed: boolean;
   shortcutsPreviousRegisterFailed: boolean;

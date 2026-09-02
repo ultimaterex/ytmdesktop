@@ -1,6 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
 
 // During early iteration, duplicate the pure functions in this .mjs OR
 // run after compiling. Prefer implementing the pure helper as .mjs-importable

@@ -27,14 +27,16 @@ function decryptPassword(passwordEncrypted: string | null): string {
   }
 }
 
-export async function applyYtmProxyFromStore(store: Conf<StoreSchema>): Promise<void> {
+export async function applyYtmProxyFromStore(store: Conf<StoreSchema>): Promise<boolean> {
   const config = buildElectronProxyConfig(store.get("proxy"));
 
   try {
     await getYtmSession(app.isPackaged).setProxy(config);
     log.info(`YTM proxy mode=${config.mode}${config.proxyRules ? ` rules=${config.proxyRules}` : ""}`);
+    return true;
   } catch (error) {
     log.error("Failed to apply YTM proxy configuration", error);
+    return false;
   }
 }
 

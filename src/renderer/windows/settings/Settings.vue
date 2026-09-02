@@ -74,10 +74,17 @@ const shortcutVolumeDown = ref<string>(shortcuts.volumeDown);
 const lastFMSessionKey = ref<string>(lastFM.sessionKey);
 const scrobblePercent = ref<number>(lastFM.scrobblePercent);
 
+function getValidProxyPort(value: unknown): number | null {
+  const normalizedValue = String(value ?? "").trim();
+  const parsedPort = Number.parseInt(normalizedValue, 10);
+  return /^\d+$/.test(normalizedValue) && Number.isInteger(parsedPort) && parsedPort >= 1 && parsedPort <= 65535 ? parsedPort : null;
+}
+
 const proxyEnabled = ref<boolean>(proxy.enabled);
 const proxyProtocol = ref<StoreSchema["proxy"]["protocol"]>(proxy.protocol);
 const proxyHost = ref<string>(proxy.host);
-const proxyPort = ref<string>(String(proxy.port));
+let persistedProxyPort = getValidProxyPort(proxy.port) ?? 1080;
+const proxyPort = ref<string>(String(persistedProxyPort));
 const proxyUsername = ref<string>(proxy.username);
 const proxyPasswordEncrypted = ref<string | null>(proxy.passwordEncrypted);
 const proxyPassword = ref<string>("");
@@ -129,7 +136,11 @@ store.onDidAnyChange(async newState => {
   proxyEnabled.value = newState.proxy.enabled;
   proxyProtocol.value = newState.proxy.protocol;
   proxyHost.value = newState.proxy.host;
-  proxyPort.value = String(newState.proxy.port);
+  const newProxyPort = getValidProxyPort(newState.proxy.port);
+  if (newProxyPort !== null) {
+    persistedProxyPort = newProxyPort;
+    proxyPort.value = String(newProxyPort);
+  }
   proxyUsername.value = newState.proxy.username;
   proxyBypassRules.value = newState.proxy.bypassRules;
   if (proxyPasswordEncrypted.value !== newState.proxy.passwordEncrypted) {
@@ -153,6 +164,8 @@ store.onDidAnyChange(async newState => {
 });
 
 const discordPresenceConnectionFailed = ref<boolean>(await memoryStore.get("discordPresenceConnectionFailed"));
+const proxyMisconfigured = ref<boolean>((await memoryStore.get("proxyMisconfigured")) ?? false);
+const proxyApplyFailed = ref<boolean>((await memoryStore.get("proxyApplyFailed")) ?? false);
 
 const shortcutsPlayPauseRegisterFailed = ref<boolean>(await memoryStore.get("shortcutsPlayPauseRegisterFailed"));
 const shortcutsNextRegisterFailed = ref<boolean>(await memoryStore.get("shortcutsNextRegisterFailed"));
@@ -168,6 +181,8 @@ const autoUpdaterDisabled = ref<boolean>(await memoryStore.get("autoUpdaterDisab
 
 memoryStore.onStateChanged(newState => {
   discordPresenceConnectionFailed.value = newState.discordPresenceConnectionFailed;
+  proxyMisconfigured.value = newState.proxyMisconfigured;
+  proxyApplyFailed.value = newState.proxyApplyFailed;
 
   shortcutsPlayPauseRegisterFailed.value = newState.shortcutsPlayPauseRegisterFailed;
   shortcutsNextRegisterFailed.value = newState.shortcutsNextRegisterFailed;
@@ -215,7 +230,10 @@ async function settingsChanged() {
   store.set("proxy.enabled", proxyEnabled.value);
   store.set("proxy.protocol", proxyProtocol.value);
   store.set("proxy.host", proxyHost.value.trim());
-  store.set("proxy.port", Number(proxyPort.value));
+  const nextProxyPort = getValidProxyPort(proxyPort.value) ?? persistedProxyPort;
+  persistedProxyPort = nextProxyPort;
+  proxyPort.value = String(nextProxyPort);
+  store.set("proxy.port", nextProxyPort);
   store.set("proxy.username", proxyUsername.value);
   store.set("proxy.bypassRules", proxyBypassRules.value);
   if (safeStorageAvailable.value && proxyPassword.value.length > 0 && proxyPassword.value !== persistedProxyPassword) {
@@ -594,6 +612,12 @@ window.ytmd.handleUpdateDownloaded(() => {
             description="Routes YouTube Music traffic through a proxy. SOCKS5 is recommended for region checks. App settings and integrations stay direct."
             @change="settingsChanged"
           />
+          <div v-if="proxyMisconfigured" class="setting indented">
+            <p class="proxy-failure">Proxy is enabled, but its host or port is invalid. YouTube Music is using a direct connection.</p>
+          </div>
+          <div v-if="proxyApplyFailed" class="setting indented">
+            <p class="proxy-failure">Proxy settings could not be applied. YouTube Music may not be using the selected proxy.</p>
+          </div>
           <YTMDSetting type="custom" name="Protocol">
             <select v-model="proxyProtocol" class="proxy-protocol" @change="settingsChanged">
               <option value="socks5">SOCKS5</option>
@@ -951,7 +975,8 @@ window.ytmd.handleUpdateDownloaded(() => {
   padding: 4px;
 }
 
-.discord-failure {
+.discord-failure,
+.proxy-failure {
   margin: 0;
   color: #969696;
 }
