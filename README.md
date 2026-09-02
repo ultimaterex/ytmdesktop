@@ -62,6 +62,19 @@ yarn install
 yarn start
 ```
 
+## Network proxy (fork)
+
+Settings → Network can route the YouTube Music view through HTTP(S) or SOCKS.
+Only the Music `BrowserView` session is proxied. SOCKS5 is recommended when
+you need remote DNS for region checks.
+
+## Fork releases
+
+Pushing a `v*` tag (for example `v2.0.12`) runs **Application Publish**, which
+uploads installers to this repository’s [GitHub Releases](../../releases).
+Every push also runs **Application Build** and uploads CI artifacts (Actions →
+workflow run → Artifacts) for Windows `.exe`, Linux `.deb`/`.rpm`, and macOS `.zip`.
+
 # Building the Project
 To build for your platform you need to run `yarn make`, however please see the information below regarding the required additionally Software, Tools and Packages which are needed to successfully package into a nice installer file.
 
