@@ -2,8 +2,9 @@
 name: Application Build
 
 on:
-  - push
-  - pull_request
+  push:
+  pull_request:
+  workflow_dispatch:
 
 jobs:
   build:
@@ -40,8 +41,8 @@ jobs:
       - name: Build (${{ matrix.arch }})
         # if: matrix.os.image == 'macos-latest'
         env:
-          YTMD_UPDATE_FEED_OWNER: ${{ vars.YTMD_UPDATE_FEED_OWNER }}
-          YTMD_UPDATE_FEED_REPOSITORY: ${{ vars.YTMD_UPDATE_FEED_REPOSITORY }}
+          YTMD_UPDATE_FEED_OWNER: ${{ vars.YTMD_UPDATE_FEED_OWNER || github.repository_owner }}
+          YTMD_UPDATE_FEED_REPOSITORY: ${{ vars.YTMD_UPDATE_FEED_REPOSITORY || github.event.repository.name }}
         run: yarn make --arch ${{ matrix.arch }}
 
       - name: Upload artifacts (${{ matrix.arch }})
@@ -53,3 +54,5 @@ jobs:
             out/make/deb/${{ matrix.arch }}/*.deb
             out/make/rpm/${{ matrix.arch }}/*.rpm
             out/make/zip/darwin/${{ matrix.arch }}/*.zip
+          if-no-files-found: warn
+          retention-days: 14
