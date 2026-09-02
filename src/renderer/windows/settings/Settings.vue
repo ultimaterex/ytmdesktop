@@ -95,6 +95,7 @@ async function decryptProxyPassword(passwordEncrypted: string | null) {
 
 proxyPassword.value = await decryptProxyPassword(proxyPasswordEncrypted.value);
 let persistedProxyPassword = proxyPassword.value;
+let proxyPasswordGeneration = 0;
 
 store.onDidAnyChange(async newState => {
   disableHardwareAcceleration.value = newState.general.disableHardwareAcceleration;
@@ -132,9 +133,14 @@ store.onDidAnyChange(async newState => {
   proxyUsername.value = newState.proxy.username;
   proxyBypassRules.value = newState.proxy.bypassRules;
   if (proxyPasswordEncrypted.value !== newState.proxy.passwordEncrypted) {
-    proxyPasswordEncrypted.value = newState.proxy.passwordEncrypted;
-    proxyPassword.value = await decryptProxyPassword(proxyPasswordEncrypted.value);
-    persistedProxyPassword = proxyPassword.value;
+    const passwordEncrypted = newState.proxy.passwordEncrypted;
+    const passwordGeneration = ++proxyPasswordGeneration;
+    proxyPasswordEncrypted.value = passwordEncrypted;
+    const password = await decryptProxyPassword(passwordEncrypted);
+    if (passwordGeneration === proxyPasswordGeneration && proxyPasswordEncrypted.value === passwordEncrypted) {
+      proxyPassword.value = password;
+      persistedProxyPassword = password;
+    }
   }
 
   shortcutPlayPause.value = newState.shortcuts.playPause;
@@ -213,10 +219,14 @@ async function settingsChanged() {
   store.set("proxy.username", proxyUsername.value);
   store.set("proxy.bypassRules", proxyBypassRules.value);
   if (safeStorageAvailable.value && proxyPassword.value.length > 0 && proxyPassword.value !== persistedProxyPassword) {
-    const passwordEncrypted = await safeStorage.encryptString(proxyPassword.value);
-    proxyPasswordEncrypted.value = passwordEncrypted as unknown as string;
-    persistedProxyPassword = proxyPassword.value;
-    store.set("proxy.passwordEncrypted", passwordEncrypted);
+    const password = proxyPassword.value;
+    const passwordGeneration = ++proxyPasswordGeneration;
+    const passwordEncrypted = await safeStorage.encryptString(password);
+    if (passwordGeneration === proxyPasswordGeneration && proxyPassword.value === password) {
+      proxyPasswordEncrypted.value = passwordEncrypted as unknown as string;
+      persistedProxyPassword = password;
+      store.set("proxy.passwordEncrypted", passwordEncrypted);
+    }
   }
 
   store.set("shortcuts.playPause", shortcutPlayPause.value);
@@ -268,6 +278,7 @@ function removeCustomCSSPath() {
 }
 
 function clearProxyPassword() {
+  proxyPasswordGeneration++;
   proxyPassword.value = "";
   persistedProxyPassword = "";
   proxyPasswordEncrypted.value = null;
@@ -611,7 +622,7 @@ window.ytmd.handleUpdateDownloaded(() => {
           />
           <div class="setting">
             <p>Stored password</p>
-            <button :disabled="!safeStorageAvailable || (!proxyPasswordEncrypted && !proxyPassword)" @click="clearProxyPassword">
+            <button :disabled="!proxyPasswordEncrypted && !proxyPassword" @click="clearProxyPassword">
               <span class="material-symbols-outlined">delete</span>Clear password
             </button>
           </div>
