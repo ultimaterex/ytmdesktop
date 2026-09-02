@@ -29,9 +29,13 @@ function decryptPassword(passwordEncrypted: string | null): string {
 
 export async function applyYtmProxyFromStore(store: Conf<StoreSchema>): Promise<void> {
   const config = buildElectronProxyConfig(store.get("proxy"));
-  await getYtmSession(app.isPackaged).setProxy(config);
 
-  log.info(`YTM proxy mode=${config.mode}${config.proxyRules ? ` rules=${config.proxyRules}` : ""}`);
+  try {
+    await getYtmSession(app.isPackaged).setProxy(config);
+    log.info(`YTM proxy mode=${config.mode}${config.proxyRules ? ` rules=${config.proxyRules}` : ""}`);
+  } catch (error) {
+    log.error("Failed to apply YTM proxy configuration", error);
+  }
 }
 
 export function resolveProxyCredentials(store: Conf<StoreSchema>): { username: string; password: string } | null {
@@ -57,8 +61,8 @@ export function attachProxyAuthHandler(store: Conf<StoreSchema>): void {
   }
 
   proxyAuthAttached = true;
-  app.on("login", (event, _webContents, _details, authInfo, callback) => {
-    if (!authInfo.isProxy) {
+  app.on("login", (event, webContents, _details, authInfo, callback) => {
+    if (!authInfo.isProxy || webContents?.session !== getYtmSession(app.isPackaged)) {
       return;
     }
 
