@@ -35,6 +35,7 @@ const playback: StoreSchema["playback"] = await store.get("playback");
 const integrations: StoreSchema["integrations"] = await store.get("integrations");
 const shortcuts: StoreSchema["shortcuts"] = await store.get("shortcuts");
 const lastFM: StoreSchema["lastfm"] = await store.get("lastfm");
+const proxy: StoreSchema["proxy"] = await store.get("proxy");
 
 const disableHardwareAcceleration = ref<boolean>(general.disableHardwareAcceleration);
 const hideToTrayOnClose = ref<boolean>(general.hideToTrayOnClose);
@@ -73,6 +74,28 @@ const shortcutVolumeDown = ref<string>(shortcuts.volumeDown);
 const lastFMSessionKey = ref<string>(lastFM.sessionKey);
 const scrobblePercent = ref<number>(lastFM.scrobblePercent);
 
+const proxyEnabled = ref<boolean>(proxy.enabled);
+const proxyProtocol = ref<StoreSchema["proxy"]["protocol"]>(proxy.protocol);
+const proxyHost = ref<string>(proxy.host);
+const proxyPort = ref<string>(String(proxy.port));
+const proxyUsername = ref<string>(proxy.username);
+const proxyPasswordEncrypted = ref<string | null>(proxy.passwordEncrypted);
+const proxyPassword = ref<string>("");
+const proxyBypassRules = ref<string>(proxy.bypassRules);
+
+async function decryptProxyPassword(passwordEncrypted: string | null) {
+  if (!safeStorageAvailable.value || !passwordEncrypted) return "";
+
+  try {
+    return (await safeStorage.decryptString(passwordEncrypted)) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+proxyPassword.value = await decryptProxyPassword(proxyPasswordEncrypted.value);
+let persistedProxyPassword = proxyPassword.value;
+
 store.onDidAnyChange(async newState => {
   disableHardwareAcceleration.value = newState.general.disableHardwareAcceleration;
   hideToTrayOnClose.value = newState.general.hideToTrayOnClose;
@@ -101,6 +124,18 @@ store.onDidAnyChange(async newState => {
   lastFMEnabled.value = newState.integrations.lastFMEnabled;
   lastFMSessionKey.value = newState.lastfm.sessionKey;
   scrobblePercent.value = newState.lastfm.scrobblePercent;
+
+  proxyEnabled.value = newState.proxy.enabled;
+  proxyProtocol.value = newState.proxy.protocol;
+  proxyHost.value = newState.proxy.host;
+  proxyPort.value = String(newState.proxy.port);
+  proxyUsername.value = newState.proxy.username;
+  proxyBypassRules.value = newState.proxy.bypassRules;
+  if (proxyPasswordEncrypted.value !== newState.proxy.passwordEncrypted) {
+    proxyPasswordEncrypted.value = newState.proxy.passwordEncrypted;
+    proxyPassword.value = await decryptProxyPassword(proxyPasswordEncrypted.value);
+    persistedProxyPassword = proxyPassword.value;
+  }
 
   shortcutPlayPause.value = newState.shortcuts.playPause;
   shortcutNext.value = newState.shortcuts.next;
@@ -171,6 +206,19 @@ async function settingsChanged() {
   store.set("integrations.lastFMEnabled", lastFMEnabled.value);
   store.set("lastfm.scrobblePercent", scrobblePercent.value);
 
+  store.set("proxy.enabled", proxyEnabled.value);
+  store.set("proxy.protocol", proxyProtocol.value);
+  store.set("proxy.host", proxyHost.value.trim());
+  store.set("proxy.port", Number(proxyPort.value));
+  store.set("proxy.username", proxyUsername.value);
+  store.set("proxy.bypassRules", proxyBypassRules.value);
+  if (safeStorageAvailable.value && proxyPassword.value.length > 0 && proxyPassword.value !== persistedProxyPassword) {
+    const passwordEncrypted = await safeStorage.encryptString(proxyPassword.value);
+    proxyPasswordEncrypted.value = passwordEncrypted as unknown as string;
+    persistedProxyPassword = proxyPassword.value;
+    store.set("proxy.passwordEncrypted", passwordEncrypted);
+  }
+
   store.set("shortcuts.playPause", shortcutPlayPause.value);
   store.set("shortcuts.next", shortcutNext.value);
   store.set("shortcuts.previous", shortcutPrevious.value);
@@ -217,6 +265,13 @@ async function deleteCompanionAuthToken(appId: string) {
 
 function removeCustomCSSPath() {
   store.set("appearance.customCSSPath", null);
+}
+
+function clearProxyPassword() {
+  proxyPassword.value = "";
+  persistedProxyPassword = "";
+  proxyPasswordEncrypted.value = null;
+  store.set("proxy.passwordEncrypted", null);
 }
 
 function changeTab(newTab: number) {
@@ -276,6 +331,7 @@ window.ytmd.handleUpdateDownloaded(() => {
         <li :class="{ active: currentTab === 3 }" @click="changeTab(3)"><span class="material-symbols-outlined">music_note</span>Playback</li>
         <li :class="{ active: currentTab === 4 }" @click="changeTab(4)"><span class="material-symbols-outlined">wifi_tethering</span>Integrations</li>
         <li :class="{ active: currentTab === 5 }" @click="changeTab(5)"><span class="material-symbols-outlined">keyboard</span>Shortcuts</li>
+        <li :class="{ active: currentTab === 6 }" @click="changeTab(6)"><span class="material-symbols-outlined">vpn_lock</span>Network</li>
         <span class="push"></span>
         <li :class="{ active: currentTab === 99 }" @click="changeTab(99)"><span class="material-symbols-outlined">info</span>About</li>
       </ul>
@@ -517,6 +573,49 @@ window.ytmd.handleUpdateDownloaded(() => {
             </p>
             <KeybindInput v-model="shortcutVolumeDown" @change="settingsChanged" />
           </div>
+        </div>
+
+        <div v-if="currentTab === 6" class="network-tab">
+          <YTMDSetting
+            v-model="proxyEnabled"
+            type="checkbox"
+            name="Proxy"
+            description="Routes YouTube Music traffic through a proxy. SOCKS5 is recommended for region checks. App settings and integrations stay direct."
+            @change="settingsChanged"
+          />
+          <YTMDSetting type="custom" name="Protocol">
+            <select v-model="proxyProtocol" class="proxy-protocol" @change="settingsChanged">
+              <option value="socks5">SOCKS5</option>
+              <option value="socks4">SOCKS4</option>
+              <option value="http">HTTP</option>
+              <option value="https">HTTPS</option>
+            </select>
+          </YTMDSetting>
+          <YTMDSetting v-model="proxyHost" type="text" name="Host" @change="settingsChanged" />
+          <YTMDSetting v-model="proxyPort" type="text" name="Port" @change="settingsChanged" />
+          <YTMDSetting
+            v-model="proxyUsername"
+            type="text"
+            name="Username"
+            :disabled="!safeStorageAvailable"
+            disabled-message="Proxy credentials cannot be configured because safeStorage is unavailable"
+            @change="settingsChanged"
+          />
+          <YTMDSetting
+            v-model="proxyPassword"
+            type="password"
+            name="Password"
+            :disabled="!safeStorageAvailable"
+            disabled-message="Proxy credentials cannot be configured because safeStorage is unavailable"
+            @change="settingsChanged"
+          />
+          <div class="setting">
+            <p>Stored password</p>
+            <button :disabled="!safeStorageAvailable || (!proxyPasswordEncrypted && !proxyPassword)" @click="clearProxyPassword">
+              <span class="material-symbols-outlined">delete</span>Clear password
+            </button>
+          </div>
+          <YTMDSetting v-model="proxyBypassRules" type="text" name="Bypass rules" @change="settingsChanged" />
         </div>
 
         <div v-if="currentTab === 99" class="about-tab">
@@ -855,6 +954,24 @@ button {
   background-color: #212121;
   cursor: pointer;
   border: none;
+}
+
+button:disabled {
+  color: #969696;
+  cursor: not-allowed;
+}
+
+.proxy-protocol {
+  width: 232px;
+  padding: 8px;
+  border: none;
+  border-radius: 4px;
+  background-color: #212121;
+  color: inherit;
+}
+
+.proxy-protocol:focus {
+  outline: none;
 }
 
 .shortcuts-tab .shortcut-title {
